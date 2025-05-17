@@ -453,3 +453,22 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
         return _unlockTime[account];
     }
 }
+
+
+
+mapping(address => uint256) private _unlockTime;
+
+function transfer(address to, uint256 amount) public override returns (bool) {
+    require(block.timestamp >= _unlockTime[msg.sender], "Tokens are locked for 15 days");
+    _transfer(msg.sender, to, amount);
+    _unlockTime[to] = block.timestamp + 15 days;
+    return true;
+}
+
+function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
+    require(block.timestamp >= _unlockTime[from], "Tokens are locked for 15 days");
+    _spendAllowance(from, msg.sender, amount);
+    _transfer(from, to, amount);
+    _unlockTime[to] = block.timestamp + 15 days;
+    return true;
+}
