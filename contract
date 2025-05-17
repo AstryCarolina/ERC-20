@@ -304,25 +304,152 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
     }
 }
 
+
+
+
+
+
+
 /** Condición: Bloqueo de tiempo (tokens bloqueados hasta una fecha)
 */
-mapping(address => uint256) private _unlockTime;
+// Mapping para el tiempo de desbloqueo
+    mapping(address => uint256) private _unlockTime;
 
-function setUnlockTime(address user, uint256 timestamp) public {
-    _unlockTime[user] = timestamp;
-}
-require(block.timestamp >= _unlockTime[msg.sender], "Tokens are locked");
+    constructor(string memory name_, string memory symbol_) {
+        _name = name_;
+        _symbol = symbol_;
+    }
 
+    function name() public view virtual returns (string memory) {
+        return _name;
+    }
 
-/** Condición: Comisión por transferencia
-*/
+    function symbol() public view virtual returns (string memory) {
+        return _symbol;
+    }
 
-address public treasury = 0x123...; // Dirección de la tesorería
+    function decimals() public view virtual returns (uint8) {
+        return 18;
+    }
 
-function _transfer(address from, address to, uint256 value) internal override {
-    uint256 fee = value / 100; // 1% fee
-    uint256 amountAfterFee = value - fee;
+    function totalSupply() public view virtual returns (uint256) {
+        return _totalSupply;
+    }
 
-    super._transfer(from, treasury, fee);
-    super._transfer(from, to, amountAfterFee);
+    function balanceOf(address account) public view virtual returns (uint256) {
+        return _balances[account];
+    }
+
+    // Bloqueo de 15 días antes de permitir transferencias
+    function transfer(address to, uint256 value) public virtual returns (bool) {
+        require(block.timestamp >= _unlockTime[msg.sender], "Tokens are locked for 15 days");
+        address owner = _msgSender();
+        _transfer(owner, to, value);
+        return true;
+    }
+
+    function allowance(address owner, address spender) public view virtual returns (uint256) {
+        return _allowances[owner][spender];
+    }
+
+    function approve(address spender, uint256 value) public virtual returns (bool) {
+        address owner = _msgSender();
+        _approve(owner, spender, value);
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 value) public virtual returns (bool) {
+        require(block.timestamp >= _unlockTime[from], "Tokens are locked for 15 days");
+        address spender = _msgSender();
+        _spendAllowance(from, spender, value);
+        _transfer(from, to, value);
+        return true;
+    }
+
+    function _transfer(address from, address to, uint256 value) internal virtual {
+        if (from == address(0)) {
+            revert ERC20InvalidSender(address(0));
+        }
+        if (to == address(0)) {
+            revert ERC20InvalidReceiver(address(0));
+        }
+        _update(from, to, value);
+    }
+
+    function _update(address from, address to, uint256 value) internal virtual {
+        if (from == address(0)) {
+            _totalSupply += value;
+        } else {
+            uint256 fromBalance = _balances[from];
+            if (fromBalance < value) {
+                revert ERC20InsufficientBalance(from, fromBalance, value);
+            }
+            unchecked {
+                _balances[from] = fromBalance - value;
+            }
+        }
+
+        if (to == address(0)) {
+            unchecked {
+                _totalSupply -= value;
+            }
+        } else {
+            unchecked {
+                _balances[to] += value;
+            }
+
+            // Asignar o actualizar tiempo de desbloqueo por 15 días
+            _unlockTime[to] = block.timestamp + 15 days;
+        }
+
+        emit Transfer(from, to, value);
+    }
+
+    function _mint(address account, uint256 value) internal virtual {
+        if (account == address(0)) {
+            revert ERC20InvalidReceiver(address(0));
+        }
+        _update(address(0), account, value);
+    }
+
+    function _burn(address account, uint256 value) internal virtual {
+        if (account == address(0)) {
+            revert ERC20InvalidSender(address(0));
+        }
+        _update(account, address(0), value);
+    }
+
+    function _approve(address owner, address spender, uint256 value) internal virtual {
+        _approve(owner, spender, value, true);
+    }
+
+    function _approve(address owner, address spender, uint256 value, bool emitEvent) internal virtual {
+        if (owner == address(0)) {
+            revert ERC20InvalidApprover(address(0));
+        }
+        if (spender == address(0)) {
+            revert ERC20InvalidSpender(address(0));
+        }
+        _allowances[owner][spender] = value;
+        if (emitEvent) {
+            emit Approval(owner, spender, value);
+        }
+    }
+
+    function _spendAllowance(address owner, address spender, uint256 value) internal virtual {
+        uint256 currentAllowance = allowance(owner, spender);
+        if (currentAllowance < type(uint256).max) {
+            if (currentAllowance < value) {
+                revert ERC20InsufficientAllowance(spender, currentAllowance, value);
+            }
+            unchecked {
+                _approve(owner, spender, currentAllowance - value, false);
+            }
+        }
+    }
+
+    // Función para consultar el tiempo de desbloqueo
+    function getUnlockTime(address account) public view returns (uint256) {
+        return _unlockTime[account];
+    }
 }
