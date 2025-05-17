@@ -303,3 +303,26 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
         }
     }
 }
+
+/** Condición: Bloqueo de tiempo (tokens bloqueados hasta una fecha)
+*/
+mapping(address => uint256) private _unlockTime;
+
+function setUnlockTime(address user, uint256 timestamp) public {
+    _unlockTime[user] = timestamp;
+}
+require(block.timestamp >= _unlockTime[msg.sender], "Tokens are locked");
+
+
+/** Condición: Comisión por transferencia
+*/
+
+address public treasury = 0x123...; // Dirección de la tesorería
+
+function _transfer(address from, address to, uint256 value) internal override {
+    uint256 fee = value / 100; // 1% fee
+    uint256 amountAfterFee = value - fee;
+
+    super._transfer(from, treasury, fee);
+    super._transfer(from, to, amountAfterFee);
+}
